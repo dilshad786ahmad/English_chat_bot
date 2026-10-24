@@ -1,0 +1,191 @@
+:root {
+  /* Default: Dark Theme (Google Gemini Dark) */
+  --bg-primary: #131314;
+  --bg-secondary: #1e1f20;
+  --bg-card: #1e1f20;
+  --bg-card-hover: #282a2c;
+  --bg-pill: #282a2c;
+  --bg-input: #1e1f20;
+  --border-subtle: #2d2f31;
+  --border-focus: #4285f4;
+  
+  --text-primary: #e3e3e3;
+  --text-secondary: #c4c7c5;
+  --text-muted: #8e918f;
+  
+  --gemini-blue: #4285f4;
+  --gemini-purple: #9b72cb;
+  --gemini-rose: #d96570;
+  --gemini-gradient: linear-gradient(135deg, #4285f4 0%, #9b72cb 50%, #d96570 100%);
+  --gemini-glow: rgba(66, 133, 244, 0.15);
+  
+  --user-bubble: #282a2c;
+  --ai-bubble: transparent;
+  
+  --scrollbar-thumb: #333537;
+  --scrollbar-hover: #484b4e;
+  
+  --card-bg-gradient: radial-gradient(circle at 50% 0%, rgba(66, 133, 244, 0.05), transparent 45%);
+  --list-bg: rgba(30, 31, 32, 0.7);
+  --table-bg: #1e1f20;
+  --table-border: rgba(255, 255, 255, 0.1);
+  --table-stripe: rgba(255, 255, 255, 0.02);
+  --code-bg: #282a2c;
+  --code-color: #f472b6;
+  --strong-color: #93c5fd;
+  --badge-bg: rgba(66, 133, 244, 0.1);
+  --badge-border: rgba(66, 133, 244, 0.25);
+  --badge-text: #79aeff;
+  --placeholder-color: #73777a;
+
+  --font-display: 'Outfit', sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 9999px;
+  
+  --transition-fast: 0.18s ease;
+  --transition-normal: 0.28s ease;
+}
+
+/* Light Theme (Google Gemini Light) */
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f0f4f9;
+  --bg-card: #f0f4f9;
+  --bg-card-hover: #e3eaf3;
+  --bg-pill: #e3eaf3;
+  --bg-input: #f0f4f9;
+  --border-subtle: #e1e6ed;
+  --border-focus: #1a73e8;
+  
+  --text-primary: #1f1f1f;
+  --text-secondary: #444746;
+  --text-muted: #727775;
+  
+  --gemini-blue: #1a73e8;
+  --gemini-purple: #8430ce;
+  --gemini-rose: #d93025;
+  --gemini-gradient: linear-gradient(135deg, #1a73e8 0%, #8430ce 50%, #d93025 100%);
+  --gemini-glow: rgba(26, 115, 232, 0.15);
+  
+  --user-bubble: #e9eef6;
+  --ai-bubble: transparent;
+  
+  --scrollbar-thumb: #dadce0;
+  --scrollbar-hover: #bdc1c6;
+  
+  --card-bg-gradient: radial-gradient(circle at 50% 0%, rgba(26, 115, 232, 0.05), transparent 50%);
+  --list-bg: #f8fafc;
+  --table-bg: #ffffff;
+  --table-border: #e2e8f0;
+  --table-stripe: #f8fafc;
+  --code-bg: #e2e8f0;
+  --code-color: #be185d;
+  --strong-color: #1d4ed8;
+  --badge-bg: rgba(26, 115, 232, 0.08);
+  --badge-border: rgba(26, 115, 232, 0.25);
+  --badge-text: #1a73e8;
+  --placeholder-color: #9aa0a6;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+  transition: background-color var(--transition-normal), color var(--transition-normal);
+}
+
+#root {
+  width: 100%;
+  height: 100%;
+  display: flex;
+}
+
+/* Custom Sleek Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-hover);
+}
+
+/* Typography Helpers */
+.gemini-gradient-text {
+  background: var(--gemini-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  display: inline-block;
+}
+
+/* Keyframes */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(66, 133, 244, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 25px rgba(155, 114, 203, 0.4);
+  }
+}
+
+@keyframes spinSlow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease forwards;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2.5s infinite ease-in-out;
+}
