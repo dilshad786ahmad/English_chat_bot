@@ -58,6 +58,24 @@ export default function App() {
   const chatEndRef = useRef(null);
 
   useEffect(() => {
+    const viewport = window.visualViewport;
+    const updateAppHeight = () => {
+      const height = viewport?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty('--app-height', `${height}px`);
+    };
+
+    updateAppHeight();
+    window.addEventListener('resize', updateAppHeight);
+    viewport?.addEventListener('resize', updateAppHeight);
+
+    return () => {
+      window.removeEventListener('resize', updateAppHeight);
+      viewport?.removeEventListener('resize', updateAppHeight);
+      document.documentElement.style.removeProperty('--app-height');
+    };
+  }, []);
+
+  useEffect(() => {
     if (!toastMessage) return undefined;
 
     const timeoutId = window.setTimeout(() => setToastMessage(''), 3000);
