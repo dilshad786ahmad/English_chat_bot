@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Camera, Pause, Play, RefreshCw, RotateCcw, X } from 'lucide-react';
 import './TeleprompterStudio.css';
 
+const SCRIPT_STORAGE_KEY = 'dark_ai_teleprompter_script';
+
 const normalizeWord = (word) => word.toLowerCase().replace(/[^a-z0-9']/g, '');
 
 const analyzeScript = (script, recognizedWords, complete) => {
@@ -74,7 +76,7 @@ export default function TeleprompterStudio({ onClose }) {
   const [isListening, setIsListening] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recognizedWords, setRecognizedWords] = useState([]);
-  const [script, setScript] = useState('');
+  const [script, setScript] = useState(() => localStorage.getItem(SCRIPT_STORAGE_KEY) || '');
   const [fontSize, setFontSize] = useState(32);
   const [scrollSpeed, setScrollSpeed] = useState(30);
   const [stage, setStage] = useState('script');
@@ -86,6 +88,10 @@ export default function TeleprompterStudio({ onClose }) {
   const recognitionRef = useRef(null);
   const recognizedWordsRef = useRef([]);
   const recognitionBaseRef = useRef([]);
+
+  useEffect(() => {
+    localStorage.setItem(SCRIPT_STORAGE_KEY, script);
+  }, [script]);
 
   const stopSpeechRecognition = () => {
     const recognition = recognitionRef.current;
@@ -353,8 +359,6 @@ export default function TeleprompterStudio({ onClose }) {
             autoFocus
             required
           />
-          <p>Your script will appear over the camera and scroll upward after a 5-second countdown.</p>
-          <p>Speech is checked with browser recognition, which may process audio using browser services. Results are approximate; it cannot reliably score pronunciation.</p>
           <button
             type="submit"
             className="teleprompter-action-button teleprompter-primary-action"
@@ -363,6 +367,8 @@ export default function TeleprompterStudio({ onClose }) {
             <Camera size={17} />
             <span>Open camera</span>
           </button>
+          <p>Your script will appear over the camera and scroll upward after a 5-second countdown.</p>
+          <p>Speech is checked with browser recognition, which may process audio using browser services. Results are approximate; it cannot reliably score pronunciation.</p>
         </form>
       </section>
     );
@@ -417,7 +423,10 @@ export default function TeleprompterStudio({ onClose }) {
         >
           {leadingWhitespace}
           {scriptParts.map((part, index) => (
-            <span className={`teleprompter-word is-${analysis.statuses[index]}`} key={index}>
+            <span
+              className={`teleprompter-word is-${isComplete ? analysis.statuses[index] : 'pending'}`}
+              key={index}
+            >
               {part}
             </span>
           ))}
