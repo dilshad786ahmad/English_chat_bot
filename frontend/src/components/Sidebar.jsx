@@ -11,7 +11,8 @@ import {
   Languages, 
   Settings2,
   Sun,
-  Moon 
+  Moon,
+  Heart,
 } from 'lucide-react';
 
 export default function Sidebar({
@@ -25,6 +26,9 @@ export default function Sidebar({
   onSelectPrompt,
   theme,
   onToggleTheme,
+  isLoggedIn,
+  onLearningPreferences,
+  onShowLogin,
 }) {
   const learningTopics = [
     {
@@ -146,6 +150,16 @@ export default function Sidebar({
 
         {/* Footer */}
         <div className="sidebar-footer">
+          {isLoggedIn && (
+            <button
+              type="button"
+              className="learning-preferences-btn"
+              onClick={onLearningPreferences}
+            >
+              <Settings2 size={15} />
+              <span>Learning preferences</span>
+            </button>
+          )}
           <div className="session-info">
             <span className="session-label">Session ID:</span>
             <span className="session-id-pill" title={sessionId}>
@@ -174,6 +188,15 @@ export default function Sidebar({
                 <Sun size={13} />
                 <span>Light</span>
               </button>
+              <button
+                type="button"
+                className={`theme-segment ${theme === 'pink' ? 'active' : ''}`}
+                onClick={() => onToggleTheme('pink')}
+                title="Pink Mode"
+              >
+                <Heart size={13} />
+                <span>Pink</span>
+              </button>
             </div>
           </div>
 
@@ -185,6 +208,18 @@ export default function Sidebar({
             <Trash2 size={15} />
             <span>Clear Current Chat</span>
           </button>
+          {!isLoggedIn && (
+            <button
+              type="button"
+              className="mobile-sidebar-login-btn"
+              onClick={() => {
+                onClose();
+                onShowLogin();
+              }}
+            >
+              <span>Sign In</span>
+            </button>
+          )}
         </div>
       </aside>
     </>

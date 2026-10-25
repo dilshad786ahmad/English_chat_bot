@@ -6,22 +6,46 @@ import {
   RefreshCw, 
   AlertCircle,
   LogOut,
-  User
+  User,
+  Trash2,
 } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import HeroGreeting from './components/HeroGreeting';
 import ChatMessage from './components/ChatMessage';
 import ChatInput from './components/ChatInput';
 import AuthModal from './components/AuthModal';
-import { sendChatMessage, fetchChatHistory, clearChatHistory } from './services/api';
+import LearningProfileModal from './components/LearningProfileModal';
+import TeleprompterStudio from './components/TeleprompterStudio';
+import {
+  sendChatMessage,
+  fetchChatHistory,
+  clearChatHistory,
+  fetchLearningProfile,
+  saveLearningProfile,
+  analyzeChatImage,
+} from './services/api';
 import { useAuth } from './context/AuthContext';
 import './App.css';
 
 // Helper to generate unique session IDs
 const generateSessionId = () => `session_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+const CHAT_RATE_LIMIT_MESSAGE =
+  'Our chat is taking a short breather. Please try again in a few minutes — your progress is still here.';
+
+const isChatRateLimitError = (error) =>
+  error.status === 429 ||
+  /(?:\b429\b|rate.?limit|tokens per day)/i.test(error.message || '');
 
 export default function App() {
-  const { user, isLoggedIn, loading, logout } = useAuth();
+  const {
+    user,
+    isLoggedIn,
+    loading,
+    logout,
+    sessionExpired,
+    sessionExpiryCountdown,
+    dismissSessionExpired,
+  } = useAuth();
 
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('dark_ai_theme') || 'dark';
@@ -44,9 +68,16 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showClearChatConfirm, setShowClearChatConfirm] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
   const [toastMessage, setToastMessage] = useState('');
   const [selectedPrompt, setSelectedPrompt] = useState('');
+  const [learningProfile, setLearningProfile] = useState(null);
+  const [isLearningProfileOpen, setIsLearningProfileOpen] = useState(false);
+  const [isLearningProfileSaving, setIsLearningProfileSaving] = useState(false);
+  const [learningProfileError, setLearningProfileError] = useState('');
+  const [isAnalyzingImage, setIsAnalyzingImage] = useState(false);
+  const [isTeleprompterOpen, setIsTeleprompterOpen] = useState(false);
 
   // Auth modal state
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -56,6 +87,33 @@ export default function App() {
   const userMenuRef = useRef(null);
 
   const chatEndRef = useRef(null);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setLearningProfile(null);
+      setIsLearningProfileOpen(false);
+      return undefined;
+    }
+
+    let isMounted = true;
+    fetchLearningProfile()
+      .then((profile) => {
+        if (!isMounted) return;
+        setLearningProfile(profile);
+        if (!profile?.onboardingCompleted) setIsLearningProfileOpen(true);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+        if (error.response?.status === 401) return;
+        setLearningProfileError(
+          error.response?.data?.message || 'Could not load your learning preferences.'
+        );
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isLoggedIn]);
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -166,16 +224,20 @@ export default function App() {
   }, [messages, isLoading]);
 
   // Handle sending a new message
-  const handleSendMessage = async (prompt) => {
-    if (!prompt.trim() || isLoading) return;
+  const handleSendMessage = async (prompt, imageAttachment = null) => {
+    if ((!prompt.trim() && !imageAttachment) || isLoading) return;
 
+    const messageText = prompt.trim() || 'Please analyze this image.';
     setErrorMessage(null);
     setSelectedPrompt('');
 
     const userMessage = {
       id: `user_${Date.now()}`,
       role: 'user',
-      content: prompt,
+      content: messageText,
+      ...(imageAttachment
+        ? { imageUrl: imageAttachment.dataUrl, imageName: imageAttachment.name }
+        : {}),
       createdAt: new Date().toISOString(),
     };
 
@@ -185,7 +247,7 @@ export default function App() {
     // Save or update session in recent list
     setSessions((prev) => {
       const exists = prev.find((s) => s.id === sessionId);
-      const title = prompt.length > 30 ? `${prompt.substring(0, 30)}...` : prompt;
+      const title = messageText.length > 30 ? `${messageText.substring(0, 30)}...` : messageText;
       if (!exists) {
         return [{ id: sessionId, title, date: new Date().toISOString() }, ...prev];
       }
@@ -199,11 +261,38 @@ export default function App() {
         id: aiMessageId,
         role: 'assistant',
         content: '',
+        ...(imageAttachment
+          ? { type: 'image-analysis', imageStatus: 'analyzing' }
+          : {}),
         createdAt: new Date().toISOString(),
       },
     ]);
 
     try {
+      if (imageAttachment) {
+        if (!isLoggedIn) {
+          setMessages((prev) => prev.map((message) => (
+            message.id === aiMessageId
+              ? {
+                  ...message,
+                  imageStatus: 'error',
+                  imageError: 'Please sign in to analyze images, then send this image again.',
+                }
+              : message
+          )));
+          return;
+        }
+
+        setIsAnalyzingImage(true);
+        const result = await analyzeChatImage(prompt.trim(), sessionId, imageAttachment.dataUrl);
+        setMessages((prev) => prev.map((message) => (
+          message.id === aiMessageId
+            ? { ...message, type: 'text', content: result.answer, imageStatus: undefined }
+            : message
+        )));
+        return;
+      }
+
       await sendChatMessage(prompt, sessionId, (token) => {
         setMessages((prev) =>
           prev.map((message) =>
@@ -215,9 +304,33 @@ export default function App() {
       });
     } catch (err) {
       console.error('Chat error:', err);
-      setErrorMessage(err.message || 'Something went wrong while connecting to the backend.');
+      if (imageAttachment) {
+        if (err.response?.status === 401 || err.status === 401) {
+          setMessages((prev) => prev.filter((message) => message.id !== aiMessageId));
+          return;
+        }
+        setMessages((prev) => prev.map((message) => (
+          message.id === aiMessageId
+            ? {
+                ...message,
+                imageStatus: 'error',
+                imageError: err.response?.data?.message ||
+                  err.message ||
+                  'Could not analyze this image. Please try again.',
+              }
+            : message
+        )));
+      } else {
+        if (err.status === 401) return;
+        setErrorMessage(
+          isChatRateLimitError(err)
+            ? CHAT_RATE_LIMIT_MESSAGE
+            : err.message || 'Something went wrong while connecting to the backend.'
+        );
+      }
     } finally {
       setIsLoading(false);
+      setIsAnalyzingImage(false);
     }
   };
 
@@ -247,8 +360,12 @@ export default function App() {
   };
 
   // Clear current session
-  const handleClearChat = async () => {
-    if (!window.confirm('Are you sure you want to clear this conversation?')) return;
+  const handleClearChat = () => {
+    setShowClearChatConfirm(true);
+  };
+
+  const confirmClearChat = async () => {
+    setShowClearChatConfirm(false);
 
     if (!isLoggedIn) {
       setMessages([]);
@@ -263,8 +380,6 @@ export default function App() {
       setSessions((prev) => prev.filter((s) => s.id !== sessionId));
     } catch (err) {
       if (err.response?.status === 401) {
-        logout();
-        setErrorMessage('Your saved chat could not be cleared because your login session has expired.');
         return;
       }
       setErrorMessage(
@@ -283,6 +398,23 @@ export default function App() {
   const handleAuthSuccess = () => {
     setShowAuthModal(false);
     setMessages([]);
+  };
+
+  const handleSaveLearningProfile = async (profile) => {
+    setIsLearningProfileSaving(true);
+    setLearningProfileError('');
+    try {
+      const savedProfile = await saveLearningProfile(profile);
+      setLearningProfile(savedProfile);
+      setIsLearningProfileOpen(false);
+    } catch (error) {
+      if (error.response?.status === 401) return;
+      setLearningProfileError(
+        error.response?.data?.message || 'Could not save your learning preferences.'
+      );
+    } finally {
+      setIsLearningProfileSaving(false);
+    }
   };
 
   const handleLogout = () => {
@@ -308,19 +440,84 @@ export default function App() {
 
   return (
     <div className="gemini-app">
+      {sessionExpired && sessionExpiryCountdown > 0 && (
+        <div className="session-expiry-overlay" role="alertdialog" aria-live="assertive">
+          <div className="session-expiry-card">
+            <h2>Session expired</h2>
+            <p>You’ll be signed out in</p>
+            <strong>{sessionExpiryCountdown}</strong>
+            <p>seconds. Please sign in again to continue.</p>
+          </div>
+        </div>
+      )}
+      {showClearChatConfirm && (
+        <div
+          className="clear-chat-confirm-overlay"
+          onClick={() => setShowClearChatConfirm(false)}
+        >
+          <section
+            className="clear-chat-confirm-dialog animate-fade-in"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="clear-chat-confirm-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="clear-chat-confirm-icon">
+              <Trash2 size={20} />
+            </div>
+            <h2 id="clear-chat-confirm-title">Clear this conversation?</h2>
+            <p>This will remove all messages in the current chat. This action can’t be undone.</p>
+            <div className="clear-chat-confirm-actions">
+              <button
+                type="button"
+                className="clear-chat-cancel-btn"
+                onClick={() => setShowClearChatConfirm(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="clear-chat-confirm-btn"
+                onClick={confirmClearChat}
+              >
+                Clear chat
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+      {isTeleprompterOpen && (
+        <TeleprompterStudio onClose={() => setIsTeleprompterOpen(false)} />
+      )}
       {toastMessage && (
-        <div className="app-toast animate-fade-in" role="status" aria-live="polite">
+        <div
+          className="app-toast animate-fade-in"
+          role="status"
+          aria-live="polite"
+        >
           {toastMessage}
         </div>
       )}
 
       {/* Auth Modal */}
       <AuthModal
-        isOpen={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
+        isOpen={showAuthModal || (sessionExpired && sessionExpiryCountdown === 0)}
+        onClose={() => {
+          setShowAuthModal(false);
+          if (sessionExpired && sessionExpiryCountdown === 0) dismissSessionExpired();
+        }}
         onSuccess={handleAuthSuccess}
       />
-
+      <LearningProfileModal
+        isOpen={isLearningProfileOpen}
+        profile={learningProfile}
+        isSaving={isLearningProfileSaving}
+        error={learningProfileError}
+        onClose={() => {
+          if (learningProfile?.onboardingCompleted) setIsLearningProfileOpen(false);
+        }}
+        onSave={handleSaveLearningProfile}
+      />
       {/* Sidebar Component */}
       <Sidebar
         isOpen={sidebarOpen}
@@ -334,6 +531,10 @@ export default function App() {
         theme={theme}
         onToggleTheme={handleToggleTheme}
         isLoggedIn={isLoggedIn}
+        onLearningPreferences={() => {
+          setLearningProfileError('');
+          setIsLearningProfileOpen(true);
+        }}
         user={user}
         onShowLogin={() => setShowAuthModal(true)}
         onLogout={handleLogout}
@@ -364,7 +565,6 @@ export default function App() {
                 <Sparkles size={16} className="sparkle-gradient-icon" />
               </div>
               <span className="navbar-gemini-title">DARK AI</span>
-              <span className="navbar-badge">Tutor</span>
             </div>
           </div>
 
@@ -428,12 +628,28 @@ export default function App() {
             <div className="error-banner animate-fade-in">
               <AlertCircle size={18} className="error-icon" />
               <div className="error-content">
-                <strong>Error: </strong>
+                <strong>{errorMessage === CHAT_RATE_LIMIT_MESSAGE ? 'A quick pause: ' : 'Error: '}</strong>
                 <span>{errorMessage}</span>
               </div>
               <button
                 className="error-dismiss-btn"
                 onClick={() => setErrorMessage(null)}
+              >
+                ✕
+              </button>
+            </div>
+          )}
+          {learningProfileError && !isLearningProfileOpen && (
+            <div className="error-banner animate-fade-in" role="alert">
+              <AlertCircle size={18} className="error-icon" />
+              <div className="error-content">
+                <strong>Learning preferences: </strong>
+                <span>{learningProfileError}</span>
+              </div>
+              <button
+                className="error-dismiss-btn"
+                onClick={() => setLearningProfileError('')}
+                aria-label="Dismiss learning preferences error"
               >
                 ✕
               </button>
@@ -466,7 +682,7 @@ export default function App() {
               ))}
 
               {/* AI Typing / Thinking State */}
-              {isLoading && (
+              {isLoading && !isAnalyzingImage && (
                 <div className="message-row assistant-row animate-fade-in">
                   <div className="message-container">
                     <div className="message-avatar ai-avatar">
@@ -475,7 +691,11 @@ export default function App() {
                     <div className="message-bubble-wrapper">
                       <div className="ai-thinking-card">
                         <div className="thinking-sparkle-dot" />
-                        <span className="thinking-text">DARK AI is thinking and formulating response...</span>
+                        <span className="thinking-text">
+                          {isAnalyzingImage
+                            ? 'DARK AI is analyzing your image...'
+                            : 'DARK AI is thinking and formulating response...'}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -493,6 +713,7 @@ export default function App() {
             onSendMessage={handleSendMessage}
             isLoading={isLoading}
             initialPrompt={selectedPrompt}
+            onOpenStudio={() => setIsTeleprompterOpen(true)}
           />
         </footer>
       </main>

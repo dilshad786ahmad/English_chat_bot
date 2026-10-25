@@ -1,11 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowUp, Mic, MicOff, Sparkles, Loader2 } from 'lucide-react';
+import { ArrowUp, Camera, Mic, MicOff, Sparkles, Loader2, Paperclip, X } from 'lucide-react';
 
-export default function ChatInput({ onSendMessage, isLoading, initialPrompt }) {
+export default function ChatInput({ onSendMessage, isLoading, initialPrompt, onOpenStudio }) {
   const [text, setText] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [imageAttachment, setImageAttachment] = useState(null);
+  const [attachmentError, setAttachmentError] = useState('');
   const textareaRef = useRef(null);
   const recognitionRef = useRef(null);
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    const stopListeningForSpeechOutput = () => {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+    };
+
+    window.addEventListener('dark-ai-voice-output-started', stopListeningForSpeechOutput);
+    return () => {
+      window.removeEventListener('dark-ai-voice-output-started', stopListeningForSpeechOutput);
+      recognitionRef.current?.stop();
+    };
+  }, []);
 
   // If initialPrompt changes (e.g. from clicking a card), update text & focus
   useEffect(() => {
@@ -34,13 +50,42 @@ export default function ChatInput({ onSendMessage, isLoading, initialPrompt }) {
 
   const handleSubmit = (e) => {
     e?.preventDefault();
-    if (!text.trim() || isLoading) return;
+    if ((!text.trim() && !imageAttachment) || isLoading) return;
 
-    onSendMessage(text.trim());
+    onSendMessage(text.trim(), imageAttachment);
     setText('');
+    setImageAttachment(null);
+    setAttachmentError('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
+  };
+
+  const handleImageSelection = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    setAttachmentError('');
+    if (!file) return;
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setAttachmentError('Choose a JPEG, PNG, or WebP image.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setAttachmentError('Image must be 5 MB or smaller.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setImageAttachment({ dataUrl: reader.result, name: file.name });
+      } else {
+        setAttachmentError('Could not read this image file.');
+      }
+    };
+    reader.onerror = () => setAttachmentError('Could not read this image file.');
+    reader.readAsDataURL(file);
   };
 
   const handleKeyDown = (e) => {
@@ -67,6 +112,7 @@ export default function ChatInput({ onSendMessage, isLoading, initialPrompt }) {
     }
 
     try {
+      window.dispatchEvent(new Event('dark-ai-voice-input-started'));
       const recognition = new SpeechRecognition();
       recognition.lang = 'en-US';
       recognition.continuous = false;
@@ -86,7 +132,8 @@ export default function ChatInput({ onSendMessage, isLoading, initialPrompt }) {
 
         const message = [text.trim(), transcript].filter(Boolean).join(' ');
         setText('');
-        onSendMessage(message);
+        onSendMessage(message, imageAttachment);
+        setImageAttachment(null);
         if (textareaRef.current) {
           textareaRef.current.style.height = 'auto';
         }
@@ -111,6 +158,27 @@ export default function ChatInput({ onSendMessage, isLoading, initialPrompt }) {
 
   return (
     <div className="input-outer-wrapper">
+      {imageAttachment && (
+        <div className="image-attachment-preview">
+          <img src={imageAttachment.dataUrl} alt={`Attached: ${imageAttachment.name}`} />
+          <span title={imageAttachment.name}>
+            {imageAttachment.name}
+            <small>Sent to AI for analysis; not saved in chat history.</small>
+          </span>
+          <button
+            type="button"
+            className="remove-image-attachment"
+            onClick={() => setImageAttachment(null)}
+            aria-label="Remove attached image"
+            disabled={isLoading}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+      {attachmentError && (
+        <p className="image-attachment-error" role="alert">{attachmentError}</p>
+      )}
       <form onSubmit={handleSubmit} className="gemini-input-pill">
         {/* Sparkle subtle icon */}
         <div className="input-sparkle-indicator">
@@ -126,7 +194,7 @@ export default function ChatInput({ onSendMessage, isLoading, initialPrompt }) {
           placeholder={
             isListening
               ? 'Listening to you speak English...'
-              : 'Ask a question, practice a sentence, or start a conversation...'
+              : 'Ask, practice English, or ask about a photo...'
           }
           rows={1}
           disabled={isLoading}
@@ -136,6 +204,35 @@ export default function ChatInput({ onSendMessage, isLoading, initialPrompt }) {
 
         {/* Controls (Mic & Send) */}
         <div className="input-actions-cluster">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="visually-hidden-file-input"
+            onChange={handleImageSelection}
+            aria-label="Choose an image to analyze"
+          />
+          <button
+            type="button"
+            className="mic-btn"
+            onClick={() => fileInputRef.current?.click()}
+            title="Attach an image to analyze"
+            aria-label="Attach an image to analyze"
+            disabled={isLoading}
+          >
+            <Paperclip size={18} />
+          </button>
+
+          <button
+            type="button"
+            className="mic-btn"
+            onClick={onOpenStudio}
+            title="Open Teleprompter Studio"
+            aria-label="Open Teleprompter Studio"
+          >
+            <Camera size={18} />
+          </button>
+
           {/* Voice input button */}
           <button
             type="button"
@@ -154,8 +251,8 @@ export default function ChatInput({ onSendMessage, isLoading, initialPrompt }) {
           {/* Send button */}
           <button
             type="submit"
-            disabled={!text.trim() || isLoading}
-            className={`send-btn ${text.trim() && !isLoading ? 'active' : ''}`}
+            disabled={(!text.trim() && !imageAttachment) || isLoading}
+            className={`${text.trim() || imageAttachment ? 'send-btn active' : 'send-btn'} ${isLoading ? 'loading' : ''}`}
             title="Send message"
             aria-label="Send message"
           >

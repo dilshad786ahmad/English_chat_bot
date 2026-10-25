@@ -42,6 +42,14 @@
     0 0 0 1px rgba(0, 0, 0, 0.04);
 }
 
+[data-theme="pink"] .auth-modal {
+  background: #fffafd;
+  border-color: #f1d6e2;
+  box-shadow:
+    0 32px 80px rgba(116, 48, 82, 0.16),
+    0 0 0 1px rgba(217, 70, 143, 0.06);
+}
+
 /* Close Button */
 .auth-close-btn {
   position: absolute;
@@ -93,6 +101,10 @@
 
 [data-theme="light"] .auth-logo-sparkle {
   color: #1a73e8;
+}
+
+[data-theme="pink"] .auth-logo-sparkle {
+  color: #d9468f;
 }
 
 .auth-title {

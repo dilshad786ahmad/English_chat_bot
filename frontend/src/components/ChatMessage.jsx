@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, Copy, Check, Volume2, VolumeX, User } from 'lucide-react';
+import { Sparkles, Copy, Check, Volume2, VolumeX, User, Image, Loader2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -104,11 +104,18 @@ export default function ChatMessage({ message, isLatest, user }) {
         return preferredVoice.voiceURI;
       });
     };
+    const stopSpeakingForVoiceInput = () => {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      setCurrentWordIndex(-1);
+    };
 
     updateVoices();
     window.speechSynthesis.addEventListener('voiceschanged', updateVoices);
+    window.addEventListener('dark-ai-voice-input-started', stopSpeakingForVoiceInput);
     return () => {
       window.speechSynthesis.removeEventListener('voiceschanged', updateVoices);
+      window.removeEventListener('dark-ai-voice-input-started', stopSpeakingForVoiceInput);
       window.speechSynthesis.cancel();
     };
   }, [isUser]);
@@ -139,6 +146,7 @@ export default function ChatMessage({ message, isLatest, user }) {
     const { speechText } = parseAiContent(message.content);
     if (!speechText) return;
 
+    window.dispatchEvent(new Event('dark-ai-voice-output-started'));
     const utterance = new SpeechSynthesisUtterance(speechText);
     utterance.lang = 'en-US';
     utterance.rate = 0.95; // Slightly slower for clear comprehension
@@ -304,7 +312,31 @@ export default function ChatMessage({ message, isLatest, user }) {
         <div className="message-bubble-wrapper">
           <div className={`message-bubble ${isUser ? 'user-bubble' : 'ai-bubble'}`}>
             {isUser ? (
-              <p className="user-message-text">{message.content}</p>
+              <>
+                <p className="user-message-text">{message.content}</p>
+                {message.imageUrl && (
+                  <img
+                    className="user-image-attachment"
+                    src={message.imageUrl}
+                    alt={`User attachment: ${message.imageName || 'image'}`}
+                  />
+                )}
+              </>
+            ) : message.type === 'image-analysis' ? (
+              <div className="inline-image-content">
+                {message.imageStatus === 'analyzing' && (
+                  <div className="inline-image-status" role="status">
+                    <Loader2 size={18} className="spinner-icon" />
+                    <span>Analyzing the image...</span>
+                  </div>
+                )}
+                {message.imageStatus === 'error' && (
+                  <div className="inline-image-error" role="alert">
+                    <Image size={17} />
+                    <span>{message.imageError}</span>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="ai-message-text">
                 {renderAiContent(message.content)}
@@ -313,7 +345,7 @@ export default function ChatMessage({ message, isLatest, user }) {
           </div>
 
           {/* Action Toolbar (for AI messages) */}
-          {!isUser && (
+          {!isUser && message.type !== 'image-analysis' && (
             <div className="message-actions">
               <select
                 className="voice-select"

@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
-
-const API_BASE_URL = 'https://ai-english-chatbot-2.onrender.com';
+import apiClient, { notifySessionExpired } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -15,6 +13,45 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem('dark_ai_token') || null);
   const [loading, setLoading] = useState(true);
+  const [sessionExpiryCountdown, setSessionExpiryCountdown] = useState(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  const logout = useCallback(() => {
+    localStorage.removeItem('dark_ai_token');
+    setToken(null);
+    setUser(null);
+  }, []);
+
+  const dismissSessionExpired = useCallback(() => {
+    setSessionExpired(false);
+    setSessionExpiryCountdown(null);
+  }, []);
+
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      setSessionExpiryCountdown((current) => current ?? 10);
+      setSessionExpired(true);
+    };
+
+    window.addEventListener('auth:session-expired', handleSessionExpired);
+    return () => window.removeEventListener('auth:session-expired', handleSessionExpired);
+  }, []);
+
+  useEffect(() => {
+    if (sessionExpiryCountdown === null || sessionExpiryCountdown === 0) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      setSessionExpiryCountdown((current) => {
+        if (current === null || current <= 1) {
+          logout();
+          return 0;
+        }
+        return current - 1;
+      });
+    }, 1000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [logout, sessionExpiryCountdown]);
 
   // Verify stored token on mount
   useEffect(() => {
@@ -22,8 +59,8 @@ export function AuthProvider({ children }) {
       setLoading(false);
       return;
     }
-    axios
-      .get(`${API_BASE_URL}/auth/me`, {
+    apiClient
+      .get('/auth/me', {
         headers: { Authorization: `Bearer ${token}` },
       })
       .then((res) => {
@@ -33,7 +70,13 @@ export function AuthProvider({ children }) {
           logout();
         }
       })
-      .catch(() => logout())
+      .catch((error) => {
+        if (error.response?.status === 401) {
+          notifySessionExpired();
+        } else {
+          logout();
+        }
+      })
       .finally(() => setLoading(false));
   }, []); // eslint-disable-line
 
@@ -41,17 +84,13 @@ export function AuthProvider({ children }) {
     localStorage.setItem('dark_ai_token', tokenVal);
     setToken(tokenVal);
     setUser(userData);
+    setSessionExpiryCountdown(null);
+    setSessionExpired(false);
   };
-
-  const logout = useCallback(() => {
-    localStorage.removeItem('dark_ai_token');
-    setToken(null);
-    setUser(null);
-  }, []);
 
   // Email/Password Register
   const register = async (name, email, password) => {
-    const res = await axios.post(`${API_BASE_URL}/auth/register`, { name, email, password });
+    const res = await apiClient.post('/auth/register', { name, email, password });
     if (res.data.success) {
       saveSession(res.data.token, res.data.user);
     }
@@ -60,7 +99,7 @@ export function AuthProvider({ children }) {
 
   // Email/Password Login
   const login = async (email, password) => {
-    const res = await axios.post(`${API_BASE_URL}/auth/login`, { email, password });
+    const res = await apiClient.post('/auth/login', { email, password });
     if (res.data.success) {
       saveSession(res.data.token, res.data.user);
     }
@@ -69,7 +108,7 @@ export function AuthProvider({ children }) {
 
   // Google OAuth Login
   const googleLogin = async (credential) => {
-    const res = await axios.post(`${API_BASE_URL}/auth/google`, { credential });
+    const res = await apiClient.post('/auth/google', { credential });
     if (res.data.success) {
       saveSession(res.data.token, res.data.user);
     }
@@ -80,7 +119,19 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, token, isLoggedIn, loading, login, register, logout, googleLogin }}
+    value={{
+      user,
+      token,
+      isLoggedIn,
+      loading,
+      sessionExpired,
+      sessionExpiryCountdown,
+      dismissSessionExpired,
+      login,
+      register,
+      logout,
+      googleLogin,
+    }}
     >
       {children}
     </AuthContext.Provider>

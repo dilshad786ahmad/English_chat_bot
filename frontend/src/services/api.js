@@ -1,6 +1,12 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://ai-english-chatbot-2.onrender.com';
+const API_BASE_URL = 'https://english-chat-bot-8vdv.onrender.com';
+
+
+
+export const notifySessionExpired = () => {
+  window.dispatchEvent(new Event('auth:session-expired'));
+};
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -22,6 +28,18 @@ apiClient.interceptors.request.use(
     return config;
   },
   (error) => Promise.reject(error)
+);
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const requestUrl = error.config?.url || '';
+    const isAuthSubmission = /^\/auth\/(login|register|google)(?:\/|$)/.test(requestUrl);
+    if (error.response?.status === 401 && localStorage.getItem('dark_ai_token') && !isAuthSubmission) {
+      notifySessionExpired();
+    }
+    return Promise.reject(error);
+  }
 );
 
 /**
@@ -52,10 +70,13 @@ export const sendChatMessage = async (prompt, sessionId, onToken) => {
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => null);
-    throw new Error(
+    const error = new Error(
       errorData?.message ||
         `Request failed with status code ${response.status}`
     );
+    error.status = response.status;
+    if (response.status === 401 && token) notifySessionExpired();
+    throw error;
   }
 
   if (!response.body) {
@@ -124,6 +145,25 @@ export const clearChatHistory = async (sessionId) => {
     console.error('Could not clear history:', error.message);
     throw error;
   }
+};
+
+export const fetchLearningProfile = async () => {
+  const response = await apiClient.get('/learning/profile');
+  return response.data?.profile || null;
+};
+
+export const saveLearningProfile = async (profile) => {
+  const response = await apiClient.put('/learning/profile', profile);
+  return response.data.profile;
+};
+
+export const analyzeChatImage = async (prompt, sessionId, image) => {
+  const response = await apiClient.post(
+    '/chat-image',
+    { prompt, sessionId, image },
+    { timeout: 120000 }
+  );
+  return response.data;
 };
 
 export default apiClient;

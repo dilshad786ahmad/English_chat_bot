@@ -91,6 +91,49 @@
   --placeholder-color: #9aa0a6;
 }
 
+/* Soft pink theme */
+[data-theme="pink"] {
+  --bg-primary: #fff3f7;
+  --bg-secondary: #ffe8f0;
+  --bg-card: #fff0f5;
+  --bg-card-hover: #ffdfeb;
+  --bg-pill: #ffe4ee;
+  --bg-input: #fff7fa;
+  --border-subtle: #f0cfdd;
+  --border-focus: #d9468f;
+
+  --text-primary: #392331;
+  --text-secondary: #644b5a;
+  --text-muted: #8d7381;
+
+  --gemini-blue: #d9468f;
+  --gemini-purple: #a855a0;
+  --gemini-rose: #e85d8f;
+  --gemini-gradient: linear-gradient(135deg, #ec4899 0%, #a855a0 55%, #f472b6 100%);
+  --gemini-glow: rgba(217, 70, 143, 0.18);
+
+  --user-bubble: #ffe4ef;
+  --ai-bubble: transparent;
+
+  --scrollbar-thumb: #e9c7d7;
+  --scrollbar-hover: #dba9c0;
+
+  --card-bg-gradient:
+    radial-gradient(ellipse at 15% 0%, rgba(244, 114, 182, 0.14), transparent 45%),
+    radial-gradient(ellipse at 85% 100%, rgba(217, 70, 143, 0.08), transparent 42%);
+  --list-bg: #fff5f9;
+  --table-bg: #fffafd;
+  --table-border: #f0d3df;
+  --table-stripe: #fff2f7;
+  --code-bg: #fce7f3;
+  --code-color: #be185d;
+  --strong-color: #be185d;
+  --badge-bg: rgba(217, 70, 143, 0.09);
+  --badge-border: rgba(217, 70, 143, 0.25);
+  --badge-text: #be3579;
+  --placeholder-color: #a88b9a;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
