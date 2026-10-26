@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Pause, Play, RefreshCw, RotateCcw, Save, Trash2, X } from 'lucide-react';
+import {
+  Camera,
+  Circle,
+  Download,
+  Pause,
+  Play,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Square,
+  Trash2,
+  X,
+} from 'lucide-react';
 import {
   deleteTeleprompterScript,
   fetchTeleprompterScripts,
@@ -20,6 +32,11 @@ export default function TeleprompterStudio({ onClose }) {
   const [facingMode, setFacingMode] = useState('user');
   const [stream, setStream] = useState(null);
   const [cameraError, setCameraError] = useState('');
+  const [recordingError, setRecordingError] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [isStartingRecording, setIsStartingRecording] = useState(false);
+  const [recordedVideoUrl, setRecordedVideoUrl] = useState('');
+  const [recordedVideoType, setRecordedVideoType] = useState('');
   const [script, setScript] = useState(() => localStorage.getItem(SCRIPT_STORAGE_KEY) || '');
   const [savedScripts, setSavedScripts] = useState([]);
   const [editingScriptId, setEditingScriptId] = useState(null);
@@ -34,8 +51,11 @@ export default function TeleprompterStudio({ onClose }) {
   const [countdown, setCountdown] = useState(null);
   const [isPaused, setIsPaused] = useState(true);
   const [isComplete, setIsComplete] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
   const videoRef = useRef(null);
   const scriptRef = useRef(null);
+  const recorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
 
   useEffect(() => {
     localStorage.setItem(SCRIPT_STORAGE_KEY, script);
@@ -111,6 +131,10 @@ export default function TeleprompterStudio({ onClose }) {
     if (videoRef.current) videoRef.current.srcObject = stream;
   }, [stream]);
 
+  useEffect(() => () => {
+    if (recordedVideoUrl) URL.revokeObjectURL(recordedVideoUrl);
+  }, [recordedVideoUrl]);
+
   useEffect(() => {
     if (countdown === null) return undefined;
 
@@ -170,11 +194,99 @@ export default function TeleprompterStudio({ onClose }) {
     if (!script.trim()) return;
     scriptRef.current?.scrollTo({ top: 0 });
     setCameraError('');
+    setRecordingError('');
     setStream(null);
     setIsComplete(false);
     setIsPaused(true);
     setCountdown(null);
+    setControlsVisible(true);
     setStage('studio');
+  };
+
+  const restartScript = () => {
+    if (scriptRef.current) scriptRef.current.scrollTop = 0;
+    setIsComplete(false);
+    setIsPaused(true);
+    setCountdown(5);
+  };
+
+  const toggleControls = () => setControlsVisible((visible) => !visible);
+
+  const handleStudioClick = (event) => {
+    if (event.target.closest('.teleprompter-controls, .teleprompter-topbar, button, input, label')) return;
+    toggleControls();
+  };
+
+  const handleStudioKeyDown = (event) => {
+    if (event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return;
+    event.preventDefault();
+    toggleControls();
+  };
+
+  const startRecording = async () => {
+    if (isStartingRecording || isRecording) return;
+    if (!stream || typeof MediaRecorder === 'undefined') {
+      setRecordingError('Video recording is not supported in this browser.');
+      return;
+    }
+
+    setIsStartingRecording(true);
+    setRecordingError('');
+    let audioStream;
+    try {
+      audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recordingStream = new MediaStream([
+        ...stream.getVideoTracks(),
+        ...audioStream.getAudioTracks(),
+      ]);
+      const mimeType = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4']
+        .find((type) => MediaRecorder.isTypeSupported(type));
+      const recorder = mimeType
+        ? new MediaRecorder(recordingStream, { mimeType })
+        : new MediaRecorder(recordingStream);
+
+      recordedChunksRef.current = [];
+      recorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recordedChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        audioStream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(recordedChunksRef.current, {
+          type: recorder.mimeType || 'video/webm',
+        });
+        if (!blob.size) {
+          setRecordingError('The recording was empty. Please try recording again.');
+          setIsRecording(false);
+          return;
+        }
+
+        setRecordedVideoType(blob.type);
+        setRecordedVideoUrl(URL.createObjectURL(blob));
+        setIsRecording(false);
+        setStage('playback');
+      };
+      recorder.onerror = () => {
+        audioStream.getTracks().forEach((track) => track.stop());
+        setRecordingError('Recording failed. Please check your camera and microphone permissions, then try again.');
+        setIsRecording(false);
+      };
+      recorder.start(1000);
+      setIsRecording(true);
+    } catch (error) {
+      audioStream?.getTracks().forEach((track) => track.stop());
+      setRecordingError(
+        error.name === 'NotAllowedError'
+          ? 'Microphone permission was denied. Allow microphone access to record video with audio.'
+          : 'Could not start recording. Check microphone access and try again.'
+      );
+    } finally {
+      setIsStartingRecording(false);
+    }
+  };
+
+  const stopRecording = () => {
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
   };
 
   const getScriptTitle = (content) => {
@@ -331,8 +443,38 @@ export default function TeleprompterStudio({ onClose }) {
     );
   }
 
+  if (stage === 'playback' && recordedVideoUrl) {
+    return (
+      <section className="teleprompter-studio teleprompter-playback" aria-label="Recorded video">
+        <video
+          className="teleprompter-recorded-video"
+          src={recordedVideoUrl}
+          controls
+          autoPlay
+          playsInline
+        />
+        <a
+          className="teleprompter-download-button"
+          href={recordedVideoUrl}
+          download={`teleprompter-recording.${recordedVideoType.includes('mp4') ? 'mp4' : 'webm'}`}
+          aria-label="Download recorded video"
+          title="Download video"
+        >
+          <Download size={20} />
+          <span>Download video</span>
+        </a>
+      </section>
+    );
+  }
+
   return (
-    <section className="teleprompter-studio" aria-label="Teleprompter camera preview">
+    <section
+      className="teleprompter-studio"
+      aria-label="Teleprompter camera preview"
+      tabIndex={0}
+      onClick={handleStudioClick}
+      onKeyDown={handleStudioKeyDown}
+    >
       <video
         ref={videoRef}
         className={`teleprompter-camera-preview ${facingMode === 'user' ? 'is-mirrored' : ''}`}
@@ -343,7 +485,11 @@ export default function TeleprompterStudio({ onClose }) {
       />
       <div className="teleprompter-camera-shade" aria-hidden="true" />
 
-      <header className="teleprompter-topbar">
+      <header
+        className={`teleprompter-topbar ${controlsVisible ? '' : 'is-hidden'}`}
+        aria-hidden={!controlsVisible}
+        inert={!controlsVisible}
+      >
         <div className="teleprompter-title">
           <Camera size={18} />
           <span>Teleprompter Studio</span>
@@ -396,7 +542,14 @@ export default function TeleprompterStudio({ onClose }) {
         </button>
       )}
 
-      <div className="teleprompter-controls" aria-label="Teleprompter controls">
+      {recordingError && <p className="teleprompter-camera-error" role="alert">{recordingError}</p>}
+
+      <div
+        className={`teleprompter-controls ${controlsVisible ? '' : 'is-hidden'}`}
+        aria-label="Teleprompter controls"
+        aria-hidden={!controlsVisible}
+        inert={!controlsVisible}
+      >
         <label className="teleprompter-range-control">
           <span>Text size <strong>{fontSize}px</strong></span>
           <input
@@ -428,10 +581,7 @@ export default function TeleprompterStudio({ onClose }) {
           className="teleprompter-action-button teleprompter-primary-action"
           onClick={() => {
             if (isComplete) {
-              if (scriptRef.current) scriptRef.current.scrollTop = 0;
-              setIsComplete(false);
-              setCountdown(5);
-              setIsPaused(true);
+              restartScript();
               return;
             }
             setIsPaused((paused) => !paused);
@@ -443,16 +593,52 @@ export default function TeleprompterStudio({ onClose }) {
           <span>{isComplete ? 'Replay' : isPaused ? 'Resume' : 'Pause'}</span>
         </button>
 
-        <button
-          type="button"
-          className="teleprompter-action-button"
-          onClick={() => setFacingMode((mode) => (mode === 'user' ? 'environment' : 'user'))}
-          aria-label={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
-          title={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
-        >
-          <RefreshCw size={17} />
-          <span>{facingMode === 'user' ? 'Front camera' : 'Back camera'}</span>
-        </button>
+        {isRecording ? (
+          <button
+            type="button"
+            className="teleprompter-action-button teleprompter-recording-action"
+            onClick={stopRecording}
+            aria-label="Stop recording"
+          >
+            <Square size={17} />
+            <span>Stop recording</span>
+          </button>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="teleprompter-action-button"
+              onClick={restartScript}
+              disabled={Boolean(cameraError || countdown !== null)}
+              title="Restart script from the beginning"
+            >
+              <RotateCcw size={17} />
+              <span>Reset</span>
+            </button>
+
+            <button
+              type="button"
+              className="teleprompter-action-button"
+              onClick={startRecording}
+              disabled={Boolean(cameraError || countdown !== null || !stream || isStartingRecording)}
+              aria-label="Start video recording"
+            >
+              <Circle size={17} />
+              <span>{isStartingRecording ? 'Starting...' : 'Record'}</span>
+            </button>
+
+            <button
+              type="button"
+              className="teleprompter-action-button"
+              onClick={() => setFacingMode((mode) => (mode === 'user' ? 'environment' : 'user'))}
+              aria-label={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
+              title={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
+            >
+              <RefreshCw size={17} />
+              <span>Switch camera</span>
+            </button>
+          </>
+        )}
       </div>
     </section>
   );
