@@ -1,18 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import apiClient, { notifySessionExpired } from '../services/api';
-
-const AuthContext = createContext(null);
-
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used inside AuthProvider');
-  return ctx;
-};
+import { AuthContext } from './auth-context';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem('dark_ai_token') || null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => Boolean(localStorage.getItem('dark_ai_token')));
   const [sessionExpiryCountdown, setSessionExpiryCountdown] = useState(null);
   const [sessionExpired, setSessionExpired] = useState(false);
 
@@ -20,6 +13,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem('dark_ai_token');
     setToken(null);
     setUser(null);
+    window.dispatchEvent(new Event('auth:logged-out'));
   }, []);
 
   const dismissSessionExpired = useCallback(() => {
@@ -55,10 +49,7 @@ export function AuthProvider({ children }) {
 
   // Verify stored token on mount
   useEffect(() => {
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+    if (!token) return undefined;
     apiClient
       .get('/auth/me', {
         headers: { Authorization: `Bearer ${token}` },

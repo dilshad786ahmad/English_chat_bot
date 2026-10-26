@@ -24,7 +24,7 @@ import {
   saveLearningProfile,
   analyzeChatImage,
 } from './services/api';
-import { useAuth } from './context/AuthContext';
+import { useAuth } from './context/auth-context';
 import './App.css';
 
 // Helper to generate unique session IDs
@@ -72,6 +72,7 @@ export default function App() {
   const [errorMessage, setErrorMessage] = useState(null);
   const [toastMessage, setToastMessage] = useState('');
   const [selectedPrompt, setSelectedPrompt] = useState('');
+  const [selectedPromptRevision, setSelectedPromptRevision] = useState(0);
   const [learningProfile, setLearningProfile] = useState(null);
   const [isLearningProfileOpen, setIsLearningProfileOpen] = useState(false);
   const [isLearningProfileSaving, setIsLearningProfileSaving] = useState(false);
@@ -90,9 +91,7 @@ export default function App() {
 
   useEffect(() => {
     if (!isLoggedIn) {
-      setLearningProfile(null);
-      setIsLearningProfileOpen(false);
-      return undefined;
+      return;
     }
 
     let isMounted = true;
@@ -114,6 +113,17 @@ export default function App() {
       isMounted = false;
     };
   }, [isLoggedIn]);
+
+  useEffect(() => {
+    const clearAuthenticatedState = () => {
+      setMessages([]);
+      setLearningProfile(null);
+      setIsLearningProfileOpen(false);
+    };
+
+    window.addEventListener('auth:logged-out', clearAuthenticatedState);
+    return () => window.removeEventListener('auth:logged-out', clearAuthenticatedState);
+  }, []);
 
   useEffect(() => {
     const viewport = window.visualViewport;
@@ -177,10 +187,7 @@ export default function App() {
 
   // Load chat history from MongoDB when sessionId changes (only if logged in)
   useEffect(() => {
-    if (!isLoggedIn) {
-      setMessages([]);
-      return;
-    }
+    if (!isLoggedIn) return undefined;
 
     let isMounted = true;
 
@@ -392,6 +399,7 @@ export default function App() {
   // Select a preset prompt
   const handleSelectPrompt = (prompt) => {
     setSelectedPrompt(prompt);
+    setSelectedPromptRevision((revision) => revision + 1);
     setSidebarOpen(false);
   };
 
@@ -676,7 +684,6 @@ export default function App() {
                 <ChatMessage
                   key={msg.id || index}
                   message={msg}
-                  isLatest={index === messages.length - 1}
                   user={isLoggedIn ? user : null}
                 />
               ))}
@@ -710,6 +717,7 @@ export default function App() {
         {/* Bottom Floating Pill Input */}
         <footer className="gemini-footer">
           <ChatInput
+            key={selectedPromptRevision}
             onSendMessage={handleSendMessage}
             isLoading={isLoading}
             initialPrompt={selectedPrompt}

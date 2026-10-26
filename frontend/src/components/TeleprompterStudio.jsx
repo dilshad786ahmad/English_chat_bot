@@ -1,14 +1,33 @@
 import { useEffect, useRef, useState } from 'react';
-import { Camera, Pause, Play, RefreshCw, RotateCcw, X } from 'lucide-react';
+import { Camera, Pause, Play, RefreshCw, RotateCcw, Save, Trash2, X } from 'lucide-react';
+import {
+  deleteTeleprompterScript,
+  fetchTeleprompterScripts,
+  saveTeleprompterScript,
+  updateTeleprompterScript,
+} from '../services/api';
 import './TeleprompterStudio.css';
 
 const SCRIPT_STORAGE_KEY = 'dark_ai_teleprompter_script';
+
+const getScriptApiError = (error, fallback) => (
+  error.response?.status === 404
+    ? 'Saved scripts are not available on the server yet. Deploy the latest backend and try again.'
+    : error.response?.data?.message || fallback
+);
 
 export default function TeleprompterStudio({ onClose }) {
   const [facingMode, setFacingMode] = useState('user');
   const [stream, setStream] = useState(null);
   const [cameraError, setCameraError] = useState('');
   const [script, setScript] = useState(() => localStorage.getItem(SCRIPT_STORAGE_KEY) || '');
+  const [savedScripts, setSavedScripts] = useState([]);
+  const [editingScriptId, setEditingScriptId] = useState(null);
+  const [selectedScriptId, setSelectedScriptId] = useState(null);
+  const [isLoadingScripts, setIsLoadingScripts] = useState(true);
+  const [isSavingScript, setIsSavingScript] = useState(false);
+  const [libraryError, setLibraryError] = useState('');
+  const [libraryMessage, setLibraryMessage] = useState('');
   const [fontSize, setFontSize] = useState(32);
   const [scrollSpeed, setScrollSpeed] = useState(30);
   const [stage, setStage] = useState('script');
@@ -21,6 +40,25 @@ export default function TeleprompterStudio({ onClose }) {
   useEffect(() => {
     localStorage.setItem(SCRIPT_STORAGE_KEY, script);
   }, [script]);
+
+  useEffect(() => {
+    let active = true;
+
+    fetchTeleprompterScripts()
+      .then((scripts) => {
+        if (active) setSavedScripts(scripts);
+      })
+      .catch((error) => {
+        if (active) setLibraryError(getScriptApiError(error, 'Could not load your saved scripts. Please try again.'));
+      })
+      .finally(() => {
+        if (active) setIsLoadingScripts(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (stage !== 'studio') return undefined;
@@ -108,15 +146,7 @@ export default function TeleprompterStudio({ onClose }) {
         const elapsedSeconds = (time - previousTime) / 1000;
         const scriptElement = scriptRef.current;
         scriptElement.scrollTop += scrollSpeed * elapsedSeconds;
-
-        const bottomPadding = Number.parseFloat(
-          window.getComputedStyle(scriptElement).paddingBottom
-        ) || 0;
-        const finalTextPosition =
-          scriptElement.scrollHeight -
-          scriptElement.clientHeight -
-          bottomPadding -
-          scriptElement.clientHeight * 0.15;
+        const finalTextPosition = scriptElement.scrollHeight - scriptElement.clientHeight;
 
         if (scriptElement.scrollTop >= finalTextPosition) {
           setIsComplete(true);
@@ -147,6 +177,46 @@ export default function TeleprompterStudio({ onClose }) {
     setStage('studio');
   };
 
+  const getScriptTitle = (content) => {
+    const firstLine = content.split(/\r?\n/).find((line) => line.trim())?.trim() || '';
+    return firstLine.slice(0, 100) || 'Untitled script';
+  };
+
+  const persistScript = async () => {
+    const scriptData = { title: getScriptTitle(script), content: script.trim() };
+    setIsSavingScript(true);
+    setLibraryError('');
+    setLibraryMessage('');
+
+    try {
+      const scripts = editingScriptId
+        ? await updateTeleprompterScript(editingScriptId, scriptData)
+        : await saveTeleprompterScript(scriptData);
+      setSavedScripts(scripts);
+      setSelectedScriptId(editingScriptId);
+      setEditingScriptId(null);
+      setLibraryMessage(editingScriptId ? 'Script updated.' : 'Script saved.');
+    } catch (error) {
+      setLibraryError(getScriptApiError(error, 'Could not save this script. Please try again.'));
+    } finally {
+      setIsSavingScript(false);
+    }
+  };
+
+  const removeScript = async (scriptId) => {
+    setLibraryError('');
+    setLibraryMessage('');
+    try {
+      const scripts = await deleteTeleprompterScript(scriptId);
+      setSavedScripts(scripts);
+      if (selectedScriptId === scriptId) setSelectedScriptId(null);
+      if (editingScriptId === scriptId) setEditingScriptId(null);
+      setLibraryMessage('Script deleted.');
+    } catch (error) {
+      setLibraryError(getScriptApiError(error, 'Could not delete this script. Please try again.'));
+    }
+  };
+
   if (stage === 'script') {
     return (
       <section className="teleprompter-studio teleprompter-script-entry" aria-label="Enter teleprompter script">
@@ -171,21 +241,91 @@ export default function TeleprompterStudio({ onClose }) {
           <textarea
             id="teleprompter-script-input"
             value={script}
-            onChange={(event) => setScript(event.target.value)}
+            onChange={(event) => {
+              setScript(event.target.value);
+              setLibraryMessage('');
+            }}
             placeholder="Type or paste your script here..."
             spellCheck="true"
             autoFocus
             required
           />
-          <button
-            type="submit"
-            className="teleprompter-action-button teleprompter-primary-action"
-            disabled={!script.trim()}
-          >
-            <Camera size={17} />
-            <span>Open camera</span>
-          </button>
+          <div className="teleprompter-script-actions">
+            <button
+              type="submit"
+              className="teleprompter-action-button teleprompter-primary-action"
+              disabled={!script.trim()}
+            >
+              <Camera size={17} />
+              <span>Open camera</span>
+            </button>
+            <button
+              type="button"
+              className="teleprompter-action-button"
+              onClick={persistScript}
+              disabled={!script.trim() || isSavingScript}
+            >
+              <Save size={17} />
+              <span>{isSavingScript ? 'Saving...' : editingScriptId ? 'Update script' : 'Save script'}</span>
+            </button>
+          </div>
+          {libraryError && <p className="teleprompter-library-error" role="alert">{libraryError}</p>}
+          {libraryMessage && <p className="teleprompter-library-message" role="status">{libraryMessage}</p>}
           <p>Your script will appear over the camera and scroll upward after a 5-second countdown.</p>
+          <div className="teleprompter-saved-scripts" aria-label="Saved scripts">
+            <h2>Saved scripts</h2>
+            {isLoadingScripts ? (
+              <p>Loading your scripts...</p>
+            ) : savedScripts.length === 0 ? (
+              <p>No saved scripts yet.</p>
+            ) : (
+              <ul>
+                {savedScripts.map((savedScript) => (
+                  <li key={savedScript._id} className={selectedScriptId === savedScript._id ? 'is-selected' : ''}>
+                    <button
+                      type="button"
+                      className="teleprompter-saved-script-title"
+                      onClick={() => {
+                        setScript(savedScript.content);
+                        setSelectedScriptId(savedScript._id);
+                        setEditingScriptId(null);
+                        setLibraryError('');
+                        setLibraryMessage('');
+                      }}
+                      title="Load this script for reading"
+                    >
+                      <strong>{savedScript.title}</strong>
+                      <span>{savedScript.content.slice(0, 110)}</span>
+                    </button>
+                    <div className="teleprompter-saved-script-actions">
+                      <button
+                        type="button"
+                        className="teleprompter-action-button"
+                        onClick={() => {
+                          setScript(savedScript.content);
+                          setSelectedScriptId(savedScript._id);
+                          setEditingScriptId(savedScript._id);
+                          setLibraryError('');
+                          setLibraryMessage('Edit the script above, then choose Update script.');
+                        }}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="teleprompter-icon-button"
+                        onClick={() => removeScript(savedScript._id)}
+                        aria-label={`Delete ${savedScript.title}`}
+                        title="Delete script"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </form>
       </section>
     );

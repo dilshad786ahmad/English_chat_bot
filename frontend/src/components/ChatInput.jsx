@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ArrowUp, Camera, Mic, MicOff, Sparkles, Loader2, Paperclip, X } from 'lucide-react';
 
 export default function ChatInput({ onSendMessage, isLoading, initialPrompt, onOpenStudio }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialPrompt || '');
   const [isListening, setIsListening] = useState(false);
   const [imageAttachment, setImageAttachment] = useState(null);
   const [attachmentError, setAttachmentError] = useState('');
@@ -23,17 +23,6 @@ export default function ChatInput({ onSendMessage, isLoading, initialPrompt, onO
     };
   }, []);
 
-  // If initialPrompt changes (e.g. from clicking a card), update text & focus
-  useEffect(() => {
-    if (initialPrompt) {
-      setText(initialPrompt);
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        adjustHeight();
-      }
-    }
-  }, [initialPrompt]);
-
   // Auto-resize textarea
   const adjustHeight = () => {
     const el = textareaRef.current;
@@ -42,6 +31,12 @@ export default function ChatInput({ onSendMessage, isLoading, initialPrompt, onO
       el.style.height = `${Math.min(el.scrollHeight, 180)}px`;
     }
   };
+
+  useEffect(() => {
+    if (!initialPrompt) return;
+    textareaRef.current?.focus();
+    adjustHeight();
+  }, [initialPrompt]);
 
   const handleInput = (e) => {
     setText(e.target.value);

@@ -77,7 +77,7 @@ const getPreferredVoice = (voices) =>
   voices.find((voice) => /^en(-|_|$)/i.test(voice.lang)) ||
   voices[0];
 
-export default function ChatMessage({ message, isLatest, user }) {
+export default function ChatMessage({ message, user }) {
   const isUser = message.role === 'user';
   const [copied, setCopied] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);

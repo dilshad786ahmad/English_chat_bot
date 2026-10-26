@@ -4,11 +4,12 @@ import { Sparkles, MessageCircle, BookCheck, Briefcase, Sparkle } from 'lucide-r
 const GREETINGS = ['Hello, Learner', 'Ready to practice?', "Let's learn English!"];
 
 export default function HeroGreeting({ onSelectPrompt }) {
-  const [greeting, setGreeting] = useState('');
+  const [greeting, setGreeting] = useState(() =>
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches ? GREETINGS[0] : ''
+  );
 
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      setGreeting(GREETINGS[0]);
       return undefined;
     }
 

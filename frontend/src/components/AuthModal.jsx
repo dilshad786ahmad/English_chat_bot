@@ -1,10 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { GoogleLogin } from '@react-oauth/google';
 import { Sparkles, Eye, EyeOff, X, Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../context/auth-context';
 import './AuthModal.css';
 
-export default function AuthModal({ isOpen, onClose, onSuccess }) {
+export default function AuthModal(props) {
+  if (!props.isOpen) return null;
+  return <AuthModalDialog {...props} />;
+}
+
+function AuthModalDialog({ onClose, onSuccess }) {
   const { login, register, googleLogin } = useAuth();
   const [mode, setMode] = useState('login'); // 'login' | 'register'
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
@@ -13,15 +18,13 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  // Reset state on open/close or mode switch
-  useEffect(() => {
+  const switchMode = (nextMode) => {
+    setMode(nextMode);
     setError('');
     setSuccess('');
     setFormData({ name: '', email: '', password: '' });
     setShowPassword(false);
-  }, [isOpen, mode]);
-
-  if (!isOpen) return null;
+  };
 
   const handleChange = (e) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -49,7 +52,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
       if (result.success) {
         setSuccess(mode === 'login' ? 'Welcome back! 🎉' : 'Account created! Welcome aboard! 🚀');
         setTimeout(() => {
-          onSuccess && onSuccess(result.user);
+          if (onSuccess) onSuccess(result.user);
         }, 800);
       } else {
         setError(result.message || 'Something went wrong');
@@ -73,7 +76,7 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
       if (result.success) {
         setSuccess('Google sign-in successful! 🎉');
         setTimeout(() => {
-          onSuccess && onSuccess(result.user);
+          if (onSuccess) onSuccess(result.user);
         }, 800);
       } else {
         setError(result.message || 'Google sign-in failed');
@@ -236,14 +239,14 @@ export default function AuthModal({ isOpen, onClose, onSuccess }) {
           {mode === 'login' ? (
             <>
               <span>Don't have an account?</span>
-              <button className="auth-switch-btn" onClick={() => setMode('register')}>
+              <button className="auth-switch-btn" onClick={() => switchMode('register')}>
                 Sign up free
               </button>
             </>
           ) : (
             <>
               <span>Already have an account?</span>
-              <button className="auth-switch-btn" onClick={() => setMode('login')}>
+              <button className="auth-switch-btn" onClick={() => switchMode('login')}>
                 Sign in
               </button>
             </>

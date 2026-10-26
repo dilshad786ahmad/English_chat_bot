@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { BookOpen, X } from 'lucide-react';
 
 const goals = [
@@ -11,32 +11,23 @@ const goals = [
   ['exam-preparation', 'Exam preparation'],
 ];
 
-const emptyProfile = {
-  goals: [],
-  preferredExplanationLanguage: 'English',
-  startingLevel: 'Beginner',
-};
+export default function LearningProfileModal(props) {
+  if (!props.isOpen) return null;
+  return <LearningProfileDialog {...props} />;
+}
 
-export default function LearningProfileModal({
-  isOpen,
+function LearningProfileDialog({
   profile,
   isSaving,
   error,
   onClose,
   onSave,
 }) {
-  const [draft, setDraft] = useState(emptyProfile);
-
-  useEffect(() => {
-    if (!isOpen) return;
-    setDraft({
-      goals: profile?.goals || [],
-      preferredExplanationLanguage: profile?.preferredExplanationLanguage || 'English',
-      startingLevel: profile?.startingLevel || 'Beginner',
-    });
-  }, [isOpen, profile]);
-
-  if (!isOpen) return null;
+  const [draft, setDraft] = useState(() => ({
+    goals: profile?.goals || [],
+    preferredExplanationLanguage: profile?.preferredExplanationLanguage || 'English',
+    startingLevel: profile?.startingLevel || 'Beginner',
+  }));
 
   const toggleGoal = (goal) => {
     setDraft((current) => ({

@@ -157,6 +157,26 @@ export const saveLearningProfile = async (profile) => {
   return response.data.profile;
 };
 
+export const fetchTeleprompterScripts = async () => {
+  const response = await apiClient.get('/teleprompter/scripts');
+  return response.data.scripts;
+};
+
+export const saveTeleprompterScript = async (script) => {
+  const response = await apiClient.post('/teleprompter/scripts', script);
+  return response.data.scripts;
+};
+
+export const updateTeleprompterScript = async (scriptId, script) => {
+  const response = await apiClient.put(`/teleprompter/scripts/${scriptId}`, script);
+  return response.data.scripts;
+};
+
+export const deleteTeleprompterScript = async (scriptId) => {
+  const response = await apiClient.delete(`/teleprompter/scripts/${scriptId}`);
+  return response.data.scripts;
+};
+
 export const analyzeChatImage = async (prompt, sessionId, image) => {
   const response = await apiClient.post(
     '/chat-image',

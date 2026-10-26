@@ -20,6 +20,7 @@ const LearningProfile = require("./models/LearningProfile.js")
 const { TavilySearch } = require("@langchain/tavily")
 const authRoutes = require("./routes/auth")
 const learningRoutes = require("./routes/learning")
+const teleprompterRoutes = require("./routes/teleprompter")
 
 const cors = require("cors")
 
@@ -60,6 +61,7 @@ const optionalAuth = (req, res, next) => {
 }
 
 app.use("/learning", requireAuth, learningRoutes)
+app.use("/teleprompter", requireAuth, teleprompterRoutes)
 
 const imageAnalysisWindows = new Map()
 const IMAGE_ANALYSIS_LIMIT = 10
